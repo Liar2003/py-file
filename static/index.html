@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<title>Nexus · File Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/xterm.min.css">
+<link rel="stylesheet" href="vendor/codemirror.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="bg-glow bg-glow-1"></div>
+<div class="bg-glow bg-glow-2"></div>
+
+<div id="login-overlay" class="overlay hidden">
+  <form id="login-form" class="login-card glass">
+    <div class="brand-mark">N</div>
+    <h1>Nexus</h1>
+    <p>Enter your access token to continue</p>
+    <input type="password" id="login-token" placeholder="Access token" autocomplete="current-password" required>
+    <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    <p id="login-error" class="login-error hidden">Invalid access token</p>
+  </form>
+</div>
+
+<div id="app-shell" class="shell hidden">
+  <aside id="sidebar" class="sidebar glass">
+    <div class="brand">
+      <span class="brand-mark sm">N</span>
+      <span class="brand-name">Nexus</span>
+    </div>
+    <nav class="side-nav">
+      <button class="nav-btn active" data-view="files"><span class="nav-ic" data-icon="files"></span><span>Files</span></button>
+      <button class="nav-btn" data-view="terminal"><span class="nav-ic" data-icon="terminal"></span><span>Terminal</span></button>
+      <button class="nav-btn" data-view="system"><span class="nav-ic" data-icon="system"></span><span>System</span></button>
+    </nav>
+    <div class="side-footer">
+      <div class="disk-widget">
+        <div class="disk-row"><span>Disk</span><span id="disk-pct-mini">--%</span></div>
+        <div class="bar"><i id="disk-bar-mini"></i></div>
+        <span id="disk-detail-mini" class="muted-xs">--</span>
+      </div>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <button id="burger" class="icon-btn only-mobile" aria-label="Menu"><span data-icon="menu"></span></button>
+    <div class="topbar-title" id="view-title">Files</div>
+    <div class="topbar-actions">
+      <span class="conn-dot" id="conn-dot" title="Server status"></span>
+      <button class="icon-btn" id="btn-reload-view" title="Refresh"><span data-icon="refresh"></span></button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section id="view-files" class="view active">
+      <div class="toolbar glass">
+        <div class="crumbs" id="breadcrumbs"></div>
+        <div class="toolbar-spacer"></div>
+        <div class="search-wrap">
+          <span class="search-ic" data-icon="search"></span>
+          <input type="text" id="search-input" placeholder="Search this folder..." autocomplete="off">
+          <button id="search-clear" class="icon-btn xs hidden"><span data-icon="close"></span></button>
+        </div>
+        <button class="icon-btn tool-btn" id="btn-sort" title="Sort"><span data-icon="sort"></span></button>
+        <button class="icon-btn tool-btn" id="btn-hidden" title="Hidden files"><span data-icon="hidden"></span></button>
+        <div class="seg" role="tablist">
+          <button class="seg-btn active" data-mode="grid" title="Grid view"><span data-icon="grid"></span></button>
+          <button class="seg-btn" data-mode="list" title="List view"><span data-icon="list"></span></button>
+        </div>
+        <button class="btn btn-primary" id="btn-new"><span data-icon="plus"></span><span class="hide-sm">New</span></button>
+        <button class="btn btn-ghost" id="btn-upload"><span data-icon="upload"></span><span class="hide-sm">Upload</span></button>
+        <input type="file" id="file-input" multiple hidden>
+      </div>
+
+      <div class="dropzone-hint hidden" id="dropzone-hint"><span data-icon="upload"></span><p>Drop files to upload</p></div>
+
+      <div class="list-head list-only" id="list-head">
+        <label class="check-all"><input type="checkbox" id="check-all"></label>
+        <span>Name</span><span class="col-size">Size</span><span class="col-date">Modified</span><span class="col-act"></span>
+      </div>
+
+      <div id="file-grid" class="file-grid"></div>
+      <div id="empty-state" class="empty-state hidden">
+        <div class="empty-ic" data-icon="folder-big"></div>
+        <p>This folder is empty</p>
+      </div>
+
+      <div class="bulk-bar glass hidden" id="bulk-bar">
+        <span id="bulk-count">0 selected</span>
+        <button class="btn btn-sm btn-ghost" id="bulk-download"><span data-icon="download"></span>Download zip</button>
+        <button class="btn btn-sm btn-ghost" id="bulk-copy"><span data-icon="copy"></span>Copy to</button>
+        <button class="btn btn-sm btn-ghost" id="bulk-cut"><span data-icon="cut"></span>Cut</button>
+        <button class="btn btn-sm btn-danger" id="bulk-delete"><span data-icon="trash"></span>Delete</button>
+        <button class="icon-btn" id="bulk-cancel"><span data-icon="close"></span></button>
+      </div>
+
+      <div class="clip-bar glass hidden" id="clip-bar">
+        <span id="clip-text"></span>
+        <button class="btn btn-sm btn-primary" id="clip-paste">Paste here</button>
+        <button class="icon-btn" id="clip-cancel"><span data-icon="close"></span></button>
+      </div>
+    </section>
+
+    <section id="view-terminal" class="view">
+      <div class="term-toolbar glass">
+        <div class="term-status"><span class="term-led" id="term-led"></span><span id="term-status-text">Disconnected</span></div>
+        <div class="toolbar-spacer"></div>
+        <select id="term-cwd" class="select" title="Start directory"><option value="">Home of server root</option></select>
+        <button class="btn btn-sm btn-primary" id="term-new">New session</button>
+        <button class="btn btn-sm btn-danger" id="term-kill">Kill</button>
+      </div>
+      <div id="term-wrap" class="term-wrap glass"></div>
+    </section>
+
+    <section id="view-system" class="view">
+      <div class="sys-grid">
+        <div class="sys-card glass span-2">
+          <div class="sys-head"><span class="nav-ic" data-icon="cpu"></span><h3>CPU</h3><span class="sys-val" id="cpu-pct">0%</span></div>
+          <canvas id="cpu-chart" height="90"></canvas>
+          <div class="sys-meta" id="cpu-meta"></div>
+        </div>
+        <div class="sys-card glass">
+          <div class="sys-head"><span class="nav-ic" data-icon="memory"></span><h3>Memory</h3><span class="sys-val" id="mem-pct">0%</span></div>
+          <div class="bar lg"><i id="mem-bar"></i></div>
+          <div class="sys-meta" id="mem-meta"></div>
+          <div class="bar sub"><i id="swap-bar"></i></div>
+          <div class="sys-meta muted" id="swap-meta"></div>
+        </div>
+        <div class="sys-card glass">
+          <div class="sys-head"><span class="nav-ic" data-icon="disk"></span><h3>Disk</h3><span class="sys-val" id="disk-pct">0%</span></div>
+          <div class="bar lg"><i id="disk-bar"></i></div>
+          <div class="sys-meta" id="disk-meta"></div>
+          <div class="bar sub"><i id="disk-root-bar"></i></div>
+          <div class="sys-meta muted" id="disk-root-meta"></div>
+        </div>
+        <div class="sys-card glass span-3">
+          <div class="sys-head"><span class="nav-ic" data-icon="server"></span><h3>Host info</h3></div>
+          <dl class="info-grid" id="host-info"></dl>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar only-mobile">
+    <button class="tab-btn active" data-view="files"><span class="nav-ic" data-icon="files"></span><span>Files</span></button>
+    <button class="tab-btn" data-view="terminal"><span class="nav-ic" data-icon="terminal"></span><span>Term</span></button>
+    <button class="tab-btn" data-view="system"><span class="nav-ic" data-icon="system"></span><span>System</span></button>
+  </nav>
+</div>
+
+<div id="ctx-menu" class="ctx-menu glass hidden"></div>
+
+<dialog id="modal" class="modal">
+  <div class="modal-card glass" id="modal-card"></div>
+</dialog>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="vendor/xterm.min.js"></script>
+<script src="vendor/xterm-addon-fit.min.js"></script>
+<script src="vendor/codemirror.min.js"></script>
+<script src="vendor/addon/edit/closebrackets.min.js"></script>
+<script src="vendor/addon/selection/active-line.min.js"></script>
+<script src="vendor/mode/javascript/javascript.min.js"></script>
+<script src="vendor/mode/xml/xml.min.js"></script>
+<script src="vendor/mode/css/css.min.js"></script>
+<script src="vendor/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="vendor/mode/python/python.min.js"></script>
+<script src="vendor/mode/markdown/markdown.min.js"></script>
+<script src="vendor/mode/shell/shell.min.js"></script>
+<script src="vendor/mode/yaml/yaml.min.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/app.js"></script>
+<script src="js/terminal.js"></script>
+</body>
+</html>
